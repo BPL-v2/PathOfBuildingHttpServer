@@ -1,0 +1,11 @@
+services:
+  pob-headless-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.headless
+    ports:
+      - "8080:8080"
+    working_dir: /workdir/src
+    environment:
+      LUA_PATH: "/workdir/src/lua/?.lua;/workdir/src/?.lua;;"
+    restart: "no"

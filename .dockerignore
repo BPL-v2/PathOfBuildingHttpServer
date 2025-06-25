@@ -1,0 +1,58 @@
+# Ignore version control
+.git
+.gitignore
+.gitattributes
+
+# Ignore editor and workspace settings
+.vscode
+
+# Ignore documentation
+*.md
+docs/
+CHANGELOG.md
+CONTRIBUTING.md
+RELEASE.md
+changelog.txt
+help.txt
+
+# Ignore tests and specs
+tests/
+spec/
+
+# Ignore Windows and runtime binaries
+runtime/*.dll
+runtime/*.exe
+runtime-win32.zip
+
+# Ignore images
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.bmp
+**/*.tiff
+**/*.ico
+**/*.webp
+
+# Ignore Python scripts and test files
+*.py
+
+# Ignore other unnecessary files
+Dockerfile
+Dockerfile.headless
+*.yml
+.editorconfig
+
+# Allow only what is needed for the headless server
+!src/
+!runtime/lua/
+
+# Now ignore images inside src/ and its subdirectories
+src/**/*.png
+src/**/*.jpg
+src/**/*.jpeg
+src/**/*.gif
+src/**/*.bmp
+src/**/*.tiff
+src/**/*.ico
+src/**/*.webp 
