@@ -113,9 +113,7 @@ local posix = require("posix")
 local socket = require("socket")
 local json = require("lua.dkjson") 
 
-print("SERVER STARTED")
 local server = assert(socket.bind("*", 8080))
-print("Listening on port 8080")
 local ok, err = pcall(function()
     local ancendancyToClass = {
         Ascendant = 'Scion', Juggernaut = 'Marauder', Berserker = 'Marauder', Chieftain = 'Marauder',
