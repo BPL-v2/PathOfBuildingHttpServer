@@ -211,10 +211,15 @@ local ok, err = pcall(function()
             local charDataObj = build.importTab:ImportItemsAndSkills(items_json)
             build.importTab:ImportPassiveTreeAndJewels(tree_json, charDataObj)
             -- set bandit, pantheon major, pantheon minor
-            build.configTab.input.bandit = character.passives.bandit_choice
-            build.configTab.input.pantheonMajorGod = character.passives.pantheon_major
-            build.configTab.input.pantheonMinorGod = character.passives.pantheon_minor
-            build.configTab.input.pantheonMinorGod = character.passives.pantheon_minor
+            if character.passives.bandit_choice then
+                build.configTab.input.bandit = character.passives.bandit_choice
+            end
+            if character.passives.pantheon_major then
+                build.configTab.input.pantheonMajorGod = character.passives.pantheon_major
+            end
+            if character.passives.pantheon_minor then
+                build.configTab.input.pantheonMinorGod = character.passives.pantheon_minor
+            end
             build.calcsTab:BuildOutput()
             for _, socketGroup in ipairs(build.skillsTab.socketGroupList) do
                 if socketGroup.mainActiveSkill == 1 then

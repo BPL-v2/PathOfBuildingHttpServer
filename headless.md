@@ -105,7 +105,7 @@ sudo luarocks install luautf8
 cd src
 ln -s ../runtime/lua lua
 export LUA_PATH="./?.lua;./?/init.lua;./lua/?.lua;./lua/?/init.lua;;"
-luajit HeadlessWrapper.lua
+luajit CharacterImportServer.lua
 ```
 
 ---
