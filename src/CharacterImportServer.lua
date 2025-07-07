@@ -37,7 +37,46 @@ function DrawStringWidth() return 1 end
 function DrawStringCursorIndex() return 0 end
 function StripEscapes(text) return text:gsub("%^%d",""):gsub("%^x%x%x%x%x%x%x","") end
 function GetAsyncCount() return 0 end
-function NewFileSearch() end
+function NewFileSearch(pattern)
+    local files = {}
+    local handle = io.popen("find . -type f -wholename '" .. pattern .. "' 2>/dev/null")
+    if handle then
+        for file in handle:lines() do
+            table.insert(files, file)
+        end
+        handle:close()
+    else
+    end
+
+    if #files == 0 then
+        return nil -- Return nil if no files are found
+    end
+
+    local index = 1
+    return {
+        GetFileName = function()
+            if files[index] then
+                return files[index]:match("([^/]+)$")
+            else
+                return nil
+            end
+        end,
+        GetFileModifiedTime = function()
+            local file = files[index]
+            if file then
+                local attr = io.popen("stat -c %Y " .. file .. " 2>/dev/null"):read("*a")
+                return tonumber(attr)
+            else
+                return nil
+            end
+        end,
+        NextFile = function()
+            index = index + 1
+            return files[index] ~= nil
+        end
+    }
+end
+
 function SetWindowTitle() end
 function GetCursorPos() return 0, 0 end
 function SetCursorPos() end
@@ -57,7 +96,10 @@ end
 function GetTime()
     return os.clock()
 end
-function GetScriptPath() return "" end
+function GetScriptPath()
+    local path = debug.getinfo(1, "S").source:match("^@(.*/)")
+    return path or "."
+end
 function GetRuntimePath() return "" end
 function GetUserPath() return "" end
 function MakeDir() end
@@ -253,7 +295,7 @@ local ok, err = pcall(function()
             build.configTab.input.conditionEnemyShocked = true
 
             local xml = build:SaveDB("code")
-            print(xml)
+            -- print(xml)
             local compressed = Deflate(xml)
             local base64 = common.base64.encode(compressed)
             local urlsafe = base64:gsub("+", "-"):gsub("/", "_")
