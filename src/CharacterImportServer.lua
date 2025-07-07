@@ -239,9 +239,9 @@ local ok, err = pcall(function()
                 }
             })
             local tree_json = json.encode({
-                character = clazz, -- or extract from charData if available
-                ascendancy = ascendancy, -- or extract from charData if available
-                alternate_ascendancy = 0, -- or extract from charData if available
+                character = clazz,
+                ascendancy = ascendancy,
+                alternate_ascendancy = 0,
                 hashes = character.passives and character.passives.hashes or {},
                 hashes_ex = character.passives and character.passives.hashes_ex or {},
                 mastery_effects = character.passives and character.passives.mastery_effects or {},
@@ -267,6 +267,7 @@ local ok, err = pcall(function()
                 socketGroup.includeInFullDPS = true
             end
             -- activate flasks
+            -- todo: flasks are not applied on stat view unfortunately, so this only does something once its imported
             for _, set in pairs(build.itemsTab.itemSets) do
                 for k, slot in pairs(set) do
                     if k:find("Flask") then
@@ -291,9 +292,9 @@ local ok, err = pcall(function()
             build.configTab.input.brandAttachedToEnemy = true
             build.configTab.input.conditionEnemyIgnited = true
             build.configTab.input.conditionEnemyShocked = true
-
+            build.configTab:BuildModList()
+            runCallback("OnFrame")
             local xml = build:SaveDB("code")
-            -- print(xml)
             local compressed = Deflate(xml)
             local base64 = common.base64.encode(compressed)
             local urlsafe = base64:gsub("+", "-"):gsub("/", "_")
