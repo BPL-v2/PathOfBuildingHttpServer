@@ -264,9 +264,7 @@ local ok, err = pcall(function()
             end
             build.calcsTab:BuildOutput()
             for _, socketGroup in ipairs(build.skillsTab.socketGroupList) do
-                if socketGroup.mainActiveSkill == 1 then
-                    socketGroup.includeInFullDPS = true
-                end
+                socketGroup.includeInFullDPS = true
             end
             -- activate flasks
             for _, set in pairs(build.itemsTab.itemSets) do
