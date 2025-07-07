@@ -292,9 +292,12 @@ local ok, err = pcall(function()
             build.configTab.input.brandAttachedToEnemy = true
             build.configTab.input.conditionEnemyIgnited = true
             build.configTab.input.conditionEnemyShocked = true
-            build.configTab:BuildModList()
-            runCallback("OnFrame")
+
+            -- hack to get the config correct: just import the build again - it just works don't question it
+            mainObject.main:SetMode("BUILD", false, name or "", build:SaveDB("code"))
+        	runCallback("OnFrame")
             local xml = build:SaveDB("code")
+
             local compressed = Deflate(xml)
             local base64 = common.base64.encode(compressed)
             local urlsafe = base64:gsub("+", "-"):gsub("/", "_")
