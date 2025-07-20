@@ -177,7 +177,6 @@ local ok, err = pcall(function()
         Scion = 0, Marauder = 1, Ranger = 2, Witch = 3,
         Duelist = 4, Templar = 5, Shadow = 6
     }
-
     while true do       
         local client = server:accept()
         local pid = posix.fork()
@@ -263,9 +262,23 @@ local ok, err = pcall(function()
                 build.configTab.input.pantheonMinorGod = character.passives.pantheon_minor
             end
             build.calcsTab:BuildOutput()
-            for _, socketGroup in ipairs(build.skillsTab.socketGroupList) do
+            local maxSupportCount = -1
+            local mainSocketGroup = 1
+            for idx, socketGroup in ipairs(build.skillsTab.socketGroupList) do
                 socketGroup.includeInFullDPS = true
+                local supportCount = 0
+                for _, gem in ipairs(socketGroup.gemList or {}) do
+                    if gem.support then
+                        supportCount = supportCount + 1
+                    end
+                end
+                if supportCount > maxSupportCount then
+                    maxSupportCount = supportCount
+                    mainSocketGroup = idx
+                end
             end
+            build.mainSocketGroup = mainSocketGroup
+
             -- activate flasks
             -- todo: flasks are not applied on stat view unfortunately, so this only does something once its imported
             for _, set in pairs(build.itemsTab.itemSets) do
@@ -297,7 +310,6 @@ local ok, err = pcall(function()
             mainObject.main:SetMode("BUILD", false, name or "", build:SaveDB("code"))
         	runCallback("OnFrame")
             local xml = build:SaveDB("code")
-
             local compressed = Deflate(xml)
             local base64 = common.base64.encode(compressed)
             local urlsafe = base64:gsub("+", "-"):gsub("/", "_")
