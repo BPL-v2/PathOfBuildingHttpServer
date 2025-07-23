@@ -300,10 +300,10 @@ local skills, mod, flag, skill = ...
 #skill SupportFocusedChannelling
 	statMap = {
 		["support_focus_channel_cost_+%_final_per_second_channelling_up_to_100%"] = {
-			mod("Cost", "MORE", nil, 0, 0, { type = "Multiplier", var = "ChannellingSeconds", limit = 100, limitTotal = true }),
+			mod("Cost", "MORE", nil, 0, 0, { type = "Multiplier", var = "ChannellingTime", limit = 100, limitTotal = true }),
 		},
 		["support_focus_channel_damage_+%_final_per_second_channelling_up_to_60%"] = {
-			mod("Damage", "MORE", nil, 0, 0, { type = "Multiplier", var = "ChannellingSeconds", limit = 60, limitTotal = true }),
+			mod("Damage", "MORE", nil, 0, 0, { type = "Multiplier", var = "ChannellingTime", limit = 60, limitTotal = true }),
 		},
 	},
 #mods
@@ -688,9 +688,6 @@ local skills, mod, flag, skill = ...
 #mods
 
 #skill SupportSummonPhantasm
-	addFlags = {
-		minion = true,
-	},
 	addMinionList = {
 		"SummonedPhantasm"
 	},
@@ -699,11 +696,11 @@ local skills, mod, flag, skill = ...
 			mod("ActivePhantasmLimit", "BASE", nil),
 		},
 		["phantasm_minimum_added_physical_damage_to_grant"] = {
-			mod("PhysicalMin", "BASE", nil, ModFlag.Spell, 0, { type = "PerStat", stat = "ActivePhantasmLimit" }, { type = "GlobalEffect", effectType = "Buff", effectName = "Phantasmal Might", effectCond = "PhantasmalMight" })
+			mod("PhysicalMin", "BASE", nil, ModFlag.Spell, 0, { type = "PerStat", stat = "ActivePhantasmLimit" }, { type = "GlobalEffect", effectType = "Buff", effectName = "Phantasmal Might", effectCond = "PhantasmalMight", allowTotemBuff = true })
 		},
 		["phantasm_maximum_added_physical_damage_to_grant"] = {
-			mod("PhysicalMax", "BASE", nil, ModFlag.Spell, 0, { type = "PerStat", stat = "ActivePhantasmLimit" }, { type = "GlobalEffect", effectType = "Buff", effectName = "Phantasmal Might", effectCond = "PhantasmalMight" })
-		}
+			mod("PhysicalMax", "BASE", nil, ModFlag.Spell, 0, { type = "PerStat", stat = "ActivePhantasmLimit" }, { type = "GlobalEffect", effectType = "Buff", effectName = "Phantasmal Might", effectCond = "PhantasmalMight", allowTotemBuff = true  })
+		},
 	},
 #mods
 

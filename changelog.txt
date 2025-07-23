@@ -1,3 +1,114 @@
+VERSION[2.55.5][2025/07/18]
+--- New to Path of Building ---
+* Add support for Replica Dragonfang's Flight variants (linusalpsten)
+
+--- Fixed Crashes ---
+* Fix Autoexertion modifying active skill tables (Paliak)
+
+--- Fixed Calculations ---
+* Fix various node scaling issues (Wires77)
+* Fix missing Minion DoT multiplier from critical hits (Wires77)
+
+--- Fixed Behaviours ---
+* Fix issue where socketed gem modifiers were scalable by Runegraft of the Bound (Wires77)
+* Fix Iron Mass giving Skeletons Triple Damage in Offhand (Blitz54)
+
+VERSION[2.55.4][2025/07/14]
+
+--- New to Path of Building ---
+* Add support for Corrupted Blood flask mods (Blitz54)
+* Add support for Righteous Fire of Arcane Devotion more Cast Speed mod (oskar94)
+
+--- Fixed Crashes ---
+* Fix Crash when copying and pasting item into PoB sometimes (Nightblade)
+
+--- User Interface ---
+* Fix Attribute Requirement sorting (Blitz54)
+* Remove Channelling time config box for Focused Channelling - Existing users should update their config (Wires77)
+* Fix gems being added to skill groups when sorting dropdown (Paliak)
+
+--- Fixed Calculations ---
+* Fix Runegraft of the Bound scaling Facebreaker's incorrectly (LocalIdentity, Wires77)
+* Fix Minion Scaling mods on Spinehail scaling with Widowhail (LocalIdentity)
+* Fix Full DPS depending on order of skill groups (Paliak)
+* Fix Spark maximum hits being calculated incorrectly (jeremykvlim)
+* Fix Minion DoT DPS not including +50% DoT multiplier from Crits (Wires77)
+* Fix Aura effect scaling when using Hand of Phrecia and  "effect of auras on you" mods (Wires77)
+* Fix inc effect on Cluster Jewel causing rounding issues (Wires77)
+
+--- Fixed Behaviours ---
+* Fix Autoexertion not working correctly with Arrogance (Paliak)
+* Fix Summon Spider / Spectral Wolf count config not scaling with Dark Monarch (LocalIdentity)
+* Fix Brand attachment duration not being scaled by Temporal Chains (LocalIdentity)
+* Fix Reduced Effect of Curses on Self scaling beyond 100% reduced effect (Blitz54)
+* Fix Maven Memory Game skill breaking Vile Bastion from working (Blitz54)
+* Fix Nametaker not instant leeching Mana and Energy Shield (Blitz54)
+* Fix Item sort option for "Current Usable" not taking into account local attribute requirement mods (LocalIdentity)
+* Fix Plague Bearer default config not applying (Blitz54)
+
+--- Accuracy Improvements ---
+* Fix Bound by Destiny Phys prevented as ES Regen mod value (LocalIdentity)
+
+VERSION[2.55.3][2025/07/02]
+
+--- Fixed Calculations ---
+* Fix Elemental Overload not reducing Ailment on crit chance to 0 (Paliak)
+* Fix Multistrike + Awakened Spell Echo not working properly with minions (LocalIdentity)
+
+--- Fixed Behaviours ---
+* Fix Phantasmal Might not working when Summon Phantasm was linked to Spell Totem (LocalIdentity)
+* Fix Elemental Overload applying to skills with 0 Crit Chance (LocalIdentity)
+* Fix Minion Duration affecting skills supported by Summon Phantasm (LocalIdentity)
+
+
+VERSION[2.55.2][2025/07/01]
+
+--- Fixed Behaviours ---
+* Fix Runegraft bonus for Boots / Gloves scaling skill gems (LocalIdentity)
+* Fix Hand of Phrecia applying auras on enemies (LocalIdentity)
+
+
+VERSION[2.55.1][2025/06/30]
+
+--- Fixed Crashes ---
+* Fix crash when trying to edit Config/Item Set after saving a new Set (Blitz54)
+
+--- Fixed Behaviours ---
+* Fix Summoned Phantasm not working correctly when used in Soulwrest (LocalIdentity)
+* Fix The Dark Monarch not scaling "per summoned x" mods (LocalIdentity)
+* Fix Swift Affliction less duration and damaging ailment duration not applying individually (deathbeam)
+* Fix Coiling Whisper applying to all Curses instead of just Hexes (pjo256)
+* Fix Runegraft bonus for Boots / Gloves not working (LocalIdentity)
+
+VERSION[2.55.0][2025/06/29]
+
+--- New to Path of Building ---
+* Add support for all new 3.26 uniques (LocalIdentity)
+* Add support for various "Infamous" (Mercenary exclusive) item modifiers (LocalIdentity, majochem)
+* Support selecting Runegrafts on Masteries (Blitz54)
+* Add support for Runegraft mods (LocalIdentity)
+* Update Timeless Jewels to work with 3.26 Tree (LocalIdentity)
+* Default build name on new builds to use the account and character name if imported (n1tr0xs)
+* Add Cast Time breakdown to Calcs page for Warcries (n1tr0xs)
+
+--- Fixed Crashes ---
+* Fix Dual Strike of Ambidexterity causing crash (Paliak)
+* Fix crash when right-clicking on a Keystone / Mastery (Blitz54)
+* Fix crash when trying to copy a blank skill set (Blitz54)
+
+--- Fixed Calculations ---
+* Fix Trigger rate calculation for SpellSlinger, Automation and Autoexertion (Paliak)
+* Fix Summon Phantasm using the active gem level instead of the support's level (LocalIdentity)
+* Fixed EHP based on block effect calculation (n1tr0xs)
+
+--- Fixed Behaviours ---
+* Fix many support gems not working correctly with Minion skills (Paliak)
+* Fix Brand Damage and Crit nodes not affecting Arcanist Brand Triggered skills (LocalIdentity)
+* Fix Watchers Eye Purity of Lightning damage taken as mod in Unique database (LocalIdentity)
+
+--- Other changes ---
+* Fix flashing cmd window during update check (ccitro)
+
 VERSION[2.54.0][2025/06/14]
 
 --- New to Path of Building ---
