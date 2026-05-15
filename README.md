@@ -1,6 +1,4 @@
-# pob-server-v2
-
-
+# PoB-server
 
 Headless Path of Building server wrapper for both:
 
@@ -78,7 +76,7 @@ luajit CharacterImportServer.lua --pob-root PathOfBuilding --host 0.0.0.0 --port
 Run:
 
 ```bash
-docker compose -f docker-compose.headless.yml up --build
+docker compose up --build
 ```
 
 That starts:
