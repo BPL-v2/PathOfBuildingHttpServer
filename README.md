@@ -5,6 +5,7 @@ Headless Path of Building server wrapper for both:
 - Path of Building
 - Path of Building PoE2
 
+to expose endpoints to create PoB exports from GGGs PoE API character data.
 The repository keeps the server logic here and pulls the PoB runtimes separately for local development and CI.
 
 ## Local development
