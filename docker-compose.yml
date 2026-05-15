@@ -1,0 +1,31 @@
+services:
+  pob-headless-poe1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workdir
+    environment:
+      POB_ROOT: "/workdir/PathOfBuilding"
+      LUA_PATH: "/workdir/PathOfBuilding/src/lua/?.lua;/workdir/PathOfBuilding/src/?.lua;;"
+    restart: "no"
+
+  pob-headless-poe2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workdir
+    environment:
+      POB_ROOT: "/workdir/PathOfBuilding-PoE2"
+      LUA_PATH: "/workdir/PathOfBuilding-PoE2/src/lua/?.lua;/workdir/PathOfBuilding-PoE2/src/?.lua;;"
+    restart: "no"
+
+  pob-headless-proxy:
+    image: nginx:1.27-alpine
+    depends_on:
+      - pob-headless-poe1
+      - pob-headless-poe2
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/headless.conf:/etc/nginx/nginx.conf:ro
+    restart: "no"

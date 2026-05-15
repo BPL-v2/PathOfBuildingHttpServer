@@ -5,7 +5,7 @@ on:
     branches:
       - main
   schedule:
-    - cron: "17 3 * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch:
 
 jobs:
@@ -51,7 +51,7 @@ jobs:
       - name: Prepare Docker build context
         run: |
           mkdir -p build-context/PathOfBuilding/runtime
-          rsync -a app/CharacterImportServer.lua app/pob_server app/Dockerfile.headless build-context/
+          rsync -a app/CharacterImportServer.lua app/pob_server app/Dockerfile build-context/
           rsync -a pob/src build-context/PathOfBuilding/
           rsync -a pob/runtime/lua build-context/PathOfBuilding/runtime/
           rsync -a pob/manifest.xml build-context/PathOfBuilding/
@@ -72,7 +72,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: build-context
-          file: build-context/Dockerfile.headless
+          file: build-context/Dockerfile
           push: true
           tags: |
             ${{ vars.DOCKER_USERNAME }}/pob-server:${{ matrix.game }}-latest
