@@ -68,6 +68,10 @@ local function serve(options)
     local posix = require("posix")
     local port = assert(options.port, "Missing port")
 
+    -- Requests are handled in forked children; line buffering makes sure
+    -- their log output is flushed before the child calls os.exit().
+    io.stdout:setvbuf("line")
+
     local server = assert(socket.bind(options.host or "*", port))
     local ok, err = pcall(function()
         while true do
@@ -75,10 +79,17 @@ local function serve(options)
             local pid = posix.fork()
             if pid == 0 then
                 local request = readRequest(client)
-                options.handleRequest(client, request, {
+                local handlerOk, handlerErr = pcall(options.handleRequest, client, request, {
                     sendResponse = sendResponse,
                     sendError = sendError,
                 })
+                if not handlerOk then
+                    print("REQUEST FAILED: " .. tostring(handlerErr))
+                    pcall(sendError, client, "500 Internal Server Error", "Internal server error.")
+                end
+                -- handleRequest is expected to exit via sendResponse/sendError;
+                -- exit here too so a bug there can't loop this child back into accept().
+                os.exit(1)
             else
                 client:close()
                 posix.wait(-1, posix.WNOHANG)

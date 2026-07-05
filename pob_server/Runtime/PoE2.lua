@@ -37,16 +37,27 @@ function Runtime.handleUpdateConfig(context, client, body, responders)
     local startTime = GetTime()
     local xmlText = Shared.decodePobCode(body)
     if not xmlText then
+        print("update-config failed: invalid PoB code")
         responders.sendError(client, "400 Bad Request", "Invalid PoB code.")
+        return
     end
 
-    local build = context.build
-    build:Shutdown()
-    build:Init(false, "Imported build", xmlText)
+    local ok, result = pcall(function()
+        local build = context.build
+        build:Shutdown()
+        build:Init(false, "Imported build", xmlText)
 
-    local urlsafe = Shared.applyConfigAndExport(build, nil)
+        return Shared.applyConfigAndExport(build, nil)
+    end)
+
+    if not ok then
+        print("update-config failed: " .. tostring(result))
+        responders.sendError(client, "400 Bad Request", tostring(result))
+        return
+    end
+
     ConPrintf("PoB auto config processed in %.3f seconds", GetTime() - startTime)
-    responders.sendResponse(client, "200 OK", "text/plain", urlsafe)
+    responders.sendResponse(client, "200 OK", "text/plain", result)
 end
 
 function Runtime.handleImportCharacter(context, client, body, responders)
@@ -54,20 +65,32 @@ function Runtime.handleImportCharacter(context, client, body, responders)
     local startTime = GetTime()
     local ok, character = pcall(json.decode, body)
     if not ok or not character then
+        print("import failed: invalid JSON body")
         responders.sendError(client, "400 Bad Request", "Invalid JSON. Expecting PoB character JSON.")
+        return
     end
 
     character = normalizeCharacterData(character)
-    print("processing character " .. tostring(character.name))
+    local characterName = tostring(character.name)
+    print("processing character " .. characterName)
 
-    local build = context.build
-    build.importTab.lastLeague = character.league
-    build.importTab:ImportItemsAndSkills(character)
-    build.importTab:ImportPassiveTreeAndJewels(character)
+    local success, result = pcall(function()
+        local build = context.build
+        build.importTab.lastLeague = character.league
+        build.importTab:ImportItemsAndSkills(character)
+        build.importTab:ImportPassiveTreeAndJewels(character)
 
-    local urlsafe = Shared.applyConfigAndExport(build, nil)
-    print(string.format("Request processed in %.3f seconds", GetTime() - startTime))
-    responders.sendResponse(client, "200 OK", "text/plain", urlsafe)
+        return Shared.applyConfigAndExport(build, nil)
+    end)
+
+    if not success then
+        print("error processing character " .. characterName .. ": " .. tostring(result))
+        responders.sendError(client, "400 Bad Request", tostring(result))
+        return
+    end
+
+    print(string.format("character %s processed in %.3f seconds", characterName, GetTime() - startTime))
+    responders.sendResponse(client, "200 OK", "text/plain", result)
 end
 
 return Runtime

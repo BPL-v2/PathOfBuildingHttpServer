@@ -139,20 +139,31 @@ function Runtime.handleUpdateConfig(context, client, body, responders)
     local startTime = GetTime()
     local xmlText = Shared.decodePobCode(body)
     if not xmlText then
+        print("update-config failed: invalid PoB code")
         responders.sendError(client, "400 Bad Request", "Invalid PoB code.")
+        return
     end
 
-    local build = context.build
-    build:Shutdown()
-    build:Init(false, "Imported build", xmlText)
+    local ok, result = pcall(function()
+        local build = context.build
+        build:Shutdown()
+        build:Init(false, "Imported build", xmlText)
 
-    for _, key in ipairs(configKeysToReset) do
-        build.configTab.input[key] = nil
+        for _, key in ipairs(configKeysToReset) do
+            build.configTab.input[key] = nil
+        end
+
+        return Shared.applyConfigAndExport(build, context.configAutoDetect)
+    end)
+
+    if not ok then
+        print("update-config failed: " .. tostring(result))
+        responders.sendError(client, "400 Bad Request", tostring(result))
+        return
     end
 
-    local urlsafe = Shared.applyConfigAndExport(build, context.configAutoDetect)
     ConPrintf("PoB auto config processed in %.3f seconds", GetTime() - startTime)
-    responders.sendResponse(client, "200 OK", "text/plain", urlsafe)
+    responders.sendResponse(client, "200 OK", "text/plain", result)
 end
 
 function Runtime.handleImportCharacter(context, client, body, responders)
@@ -160,53 +171,65 @@ function Runtime.handleImportCharacter(context, client, body, responders)
     local startTime = GetTime()
     local ok, character = pcall(json.decode, body)
     if not ok or not character then
+        print("import failed: invalid JSON body")
         responders.sendError(client, "400 Bad Request", "Invalid JSON. Expecting PoB character JSON.")
+        return
     end
 
-    print("processing character " .. tostring(character.name))
+    local characterName = tostring(character.name)
+    print("processing character " .. characterName)
 
-    local characterClass, ascendancy, classError = resolveCharacterClass(character.class, context.classIndex)
-    if classError then
-        responders.sendError(client, "400 Bad Request", classError)
+    local success, result = pcall(function()
+        local characterClass, ascendancy, classError = resolveCharacterClass(character.class, context.classIndex)
+        if classError then
+            error(classError, 0)
+        end
+
+        local itemsJson = json.encode({
+            items = character.equipment or {},
+            jewels = character.jewels or {},
+            character = {
+                name = character.name,
+                realm = character.realm,
+                class = character.class,
+                league = character.league,
+                level = character.level,
+            },
+        })
+
+        local passives = character.passives or {}
+        local treeJson = json.encode({
+            character = characterClass,
+            ascendancy = ascendancy,
+            alternate_ascendancy = passives.alternate_ascendancy or 0,
+            hashes = passives.hashes or {},
+            hashes_ex = passives.hashes_ex or {},
+            mastery_effects = passives.mastery_effects or {},
+            skill_overrides = passives.skill_overrides or {},
+            items = character.jewels or {},
+            jewel_data = passives.jewel_data or {},
+        })
+
+        local build = context.build
+        build.importTab.lastLeague = character.league
+        local charDataObj = build.importTab:ImportItemsAndSkills(itemsJson)
+        build.importTab:ImportPassiveTreeAndJewels(treeJson, charDataObj)
+
+        build.configTab.input.bandit = normalizeBandit(passives.bandit_choice)
+        build.configTab.input.pantheonMajorGod = normalizePantheon(passives.pantheon_major)
+        build.configTab.input.pantheonMinorGod = normalizePantheon(passives.pantheon_minor)
+
+        return Shared.applyConfigAndExport(build, context.configAutoDetect)
+    end)
+
+    if not success then
+        print("error processing character " .. characterName .. ": " .. tostring(result))
+        responders.sendError(client, "400 Bad Request", tostring(result))
+        return
     end
 
-    local itemsJson = json.encode({
-        items = character.equipment or {},
-        jewels = character.jewels or {},
-        character = {
-            name = character.name,
-            realm = character.realm,
-            class = character.class,
-            league = character.league,
-            level = character.level,
-        },
-    })
-
-    local passives = character.passives or {}
-    local treeJson = json.encode({
-        character = characterClass,
-        ascendancy = ascendancy,
-        alternate_ascendancy = passives.alternate_ascendancy or 0,
-        hashes = passives.hashes or {},
-        hashes_ex = passives.hashes_ex or {},
-        mastery_effects = passives.mastery_effects or {},
-        skill_overrides = passives.skill_overrides or {},
-        items = character.jewels or {},
-        jewel_data = passives.jewel_data or {},
-    })
-
-    local build = context.build
-    build.importTab.lastLeague = character.league
-    local charDataObj = build.importTab:ImportItemsAndSkills(itemsJson)
-    build.importTab:ImportPassiveTreeAndJewels(treeJson, charDataObj)
-
-    build.configTab.input.bandit = normalizeBandit(passives.bandit_choice)
-    build.configTab.input.pantheonMajorGod = normalizePantheon(passives.pantheon_major)
-    build.configTab.input.pantheonMinorGod = normalizePantheon(passives.pantheon_minor)
-
-    local urlsafe = Shared.applyConfigAndExport(build, context.configAutoDetect)
-    print(string.format("Request processed in %.3f seconds", GetTime() - startTime))
-    responders.sendResponse(client, "200 OK", "text/plain", urlsafe)
+    print(string.format("character %s processed in %.3f seconds", characterName, GetTime() - startTime))
+    responders.sendResponse(client, "200 OK", "text/plain", result)
 end
 
 return Runtime
