@@ -27,6 +27,10 @@ local configKeysToReset = {
     "DisableEHPGainOnBlock",
 }
 
+local function normalizeAlternateAscendancy(value)
+    return tonumber(value) or 0
+end
+
 local function normalizeBandit(value)
     local validBandits = {
         None = true,
@@ -201,7 +205,7 @@ function Runtime.handleImportCharacter(context, client, body, responders)
         local treeJson = json.encode({
             character = characterClass,
             ascendancy = ascendancy,
-            alternate_ascendancy = passives.alternate_ascendancy or 0,
+            alternate_ascendancy = normalizeAlternateAscendancy(passives.alternate_ascendancy),
             hashes = passives.hashes or {},
             hashes_ex = passives.hashes_ex or {},
             mastery_effects = passives.mastery_effects or {},
