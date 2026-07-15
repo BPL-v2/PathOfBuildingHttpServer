@@ -84,7 +84,7 @@ Configuration is via environment variables:
 | `POB_QUEUE_TIMEOUT_SEC` | `30`                        | Max seconds a request waits for a worker   |
 | `POB_STATS_LOG_SEC`     | `60`                        | Resource log line interval (0 disables)    |
 | `LUAJIT_BIN`            | `luajit`                    | luajit executable                          |
-| `POB_ENTRY`             | `CharacterImportServer.lua` | Lua worker entrypoint                      |
+| `POB_ENTRY`             | `CharacterImportService.lua` | Lua worker entrypoint                     |
 
 Note on memory: each warm worker is a fully initialized PoB process, so the
 pool size directly controls the resident memory footprint.
@@ -127,7 +127,7 @@ from stdin and writes a framed response to stdout:
 ```bash
 BODY='{"name":"test"}'
 printf 'import-character %d\n%s' "${#BODY}" "$BODY" \
-  | luajit CharacterImportServer.lua --pob-root PathOfBuilding
+  | luajit CharacterImportService.lua --pob-root PathOfBuilding
 ```
 
 ### Test with docker compose
@@ -153,11 +153,11 @@ curl http://localhost:8080/healthz
 ## Runtime layout
 
 - `main.go` - Go HTTP server: routing, worker pools, process supervision, health
-- `CharacterImportServer.lua` - luajit worker entrypoint (one process per request, pre-warmed)
-- `pob_server/CharacterImportServer.lua` - worker bootstrap, stdio protocol and routing
-- `pob_server/Runtime/PoE1.lua` - PoE1-specific import/update behavior
-- `pob_server/Runtime/PoE2.lua` - PoE2-specific import/update behavior
-- `pob_server/Runtime/Shared.lua` - shared export and JSON helpers
+- `CharacterImportService.lua` - luajit worker entrypoint (one process per request, pre-warmed)
+- `pob_wrapper/CharacterImportService.lua` - worker bootstrap, stdio protocol and routing
+- `pob_wrapper/Runtime/PoE1.lua` - PoE1-specific import/update behavior
+- `pob_wrapper/Runtime/PoE2.lua` - PoE2-specific import/update behavior
+- `pob_wrapper/Runtime/Shared.lua` - shared export and JSON helpers
 
 ## CI/CD
 

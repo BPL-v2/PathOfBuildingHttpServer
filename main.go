@@ -20,7 +20,7 @@ func main() {
 	cfg := config{
 		listenAddr:   envOr("POB_LISTEN_ADDR", ":8080"),
 		luajitBin:    envOr("LUAJIT_BIN", "luajit"),
-		entry:        envOr("POB_ENTRY", "CharacterImportServer.lua"),
+		entry:        envOr("POB_ENTRY", "CharacterImportService.lua"),
 		startTimeout: envDurationSecOr("POB_START_TIMEOUT_SEC", 120*time.Second),
 		jobTimeout:   envDurationSecOr("POB_JOB_TIMEOUT_SEC", 120*time.Second),
 		queueTimeout: envDurationSecOr("POB_QUEUE_TIMEOUT_SEC", 30*time.Second),

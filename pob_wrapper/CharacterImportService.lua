@@ -56,7 +56,7 @@ local function parseArgs(cliArgs)
             index = index + 1
             options.pobRoot = cliArgs[index]
         elseif value == "--help" or value == "-h" then
-            io.stderr:write("Usage: luajit CharacterImportServer.lua [--pob-root PATH]\n")
+            io.stderr:write("Usage: luajit CharacterImportService.lua [--pob-root PATH]\n")
             io.stderr:write("Reads one job from stdin: '<endpoint> <byte-length>\\n<body>'\n")
             io.stderr:write("Writes '#POB RESPONSE <status> <byte-length>\\n<body>' to stdout.\n")
             os.exit(0)
