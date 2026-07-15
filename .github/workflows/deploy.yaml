@@ -57,7 +57,7 @@ jobs:
       - name: Prepare Docker build context
         run: |
           mkdir -p build-context/PathOfBuilding/runtime build-context/PathOfBuilding-PoE2/runtime
-          rsync -a app/CharacterImportService.lua app/pob_wrapper app/Dockerfile app/go.mod app/go.sum app/main.go app/metrics.go build-context/
+          rsync -a app/CharacterImportService.lua app/pob_wrapper app/Dockerfile app/go.mod app/go.sum app/*.go build-context/
           rsync -a pob-poe1/src build-context/PathOfBuilding/
           rsync -a pob-poe1/runtime/lua build-context/PathOfBuilding/runtime/
           rsync -a pob-poe1/manifest.xml build-context/PathOfBuilding/
