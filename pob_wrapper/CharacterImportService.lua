@@ -55,14 +55,10 @@ local function parseArgs(cliArgs)
         if value == "--pob-root" then
             index = index + 1
             options.pobRoot = cliArgs[index]
-        elseif value == "--port" then
-            index = index + 1
-            options.port = tonumber(cliArgs[index])
-        elseif value == "--host" then
-            index = index + 1
-            options.host = cliArgs[index]
         elseif value == "--help" or value == "-h" then
-            io.stderr:write("Usage: luajit CharacterImportServer.lua [--pob-root PATH] [--host HOST] [--port PORT]\n")
+            io.stderr:write("Usage: luajit CharacterImportServer.lua [--pob-root PATH]\n")
+            io.stderr:write("Reads one job from stdin: '<endpoint> <byte-length>\\n<body>'\n")
+            io.stderr:write("Writes '#POB RESPONSE <status> <byte-length>\\n<body>' to stdout.\n")
             os.exit(0)
         else
             error("Unknown argument: " .. tostring(value))
@@ -109,7 +105,7 @@ local function discoverPobRoot(repositoryRoot, configuredRoot)
 end
 
 local function loadSharedModule(repositoryRoot, ...)
-    return assert(loadfile(joinPath(repositoryRoot, "pob_server", ...)))
+    return assert(loadfile(joinPath(repositoryRoot, "pob_wrapper", ...)))
 end
 
 local function initializePob(repositoryRoot, pobRoot)
@@ -134,10 +130,6 @@ local function initializePob(repositoryRoot, pobRoot)
     return mainObject.main.modes["BUILD"]
 end
 
-local function loadHttpServer(repositoryRoot)
-    return loadSharedModule(repositoryRoot, "HttpServer.lua")()
-end
-
 local function detectRuntimeFlavor(build, pobRoot)
     local classNameMap = build and build.spec and build.spec.tree and build.spec.tree.classNameMap
     if (pobRoot and pobRoot:match("PoE2"))
@@ -160,34 +152,82 @@ local function loadRuntimeHandler(repositoryRoot, runtimeFlavor)
     return loadSharedModule(repositoryRoot, "Runtime", moduleName)(shared)
 end
 
-local function serve(options)
+-- Reroute print() to stderr: stdout is reserved for the framed worker
+-- protocol read by the Go supervisor. Sentinel framing ("#POB " lines) keeps
+-- the protocol safe even if some module writes to stdout anyway.
+local function redirectLogsToStderr()
+    io.stderr:setvbuf("line")
+    _G.print = function(...)
+        local parts = { }
+        for index = 1, select("#", ...) do
+            parts[index] = tostring(select(index, ...))
+        end
+        io.stderr:write(table.concat(parts, "\t"), "\n")
+    end
+end
+
+local function readJob()
+    local header = io.stdin:read("*l")
+    if not header then
+        return nil
+    end
+    local endpoint, length = header:match("^(%S+)%s+(%d+)$")
+    if not endpoint then
+        error("Malformed job header: " .. tostring(header))
+    end
+    local body = ""
+    length = tonumber(length)
+    if length > 0 then
+        body = assert(io.stdin:read(length), "Job body shorter than declared length")
+    end
+    return endpoint, body
+end
+
+local function writeResponse(status, body)
+    body = body or ""
+    io.stdout:write(string.format("#POB RESPONSE %d %d\n", status, #body))
+    io.stdout:write(body)
+    io.stdout:flush()
+end
+
+-- One-shot worker: initialize PoB, announce readiness, handle exactly one
+-- job from stdin, respond on stdout, exit. The Go supervisor keeps a pool of
+-- pre-warmed workers, so every request runs against fresh PoB state.
+local function runWorker(options)
     local cliOptions = parseArgs(arg or {})
     local repositoryRoot = trimTrailingSlash(assert(options.repositoryRoot, "Missing repositoryRoot"))
     local pobRoot = discoverPobRoot(repositoryRoot, options.defaultPobRoot or cliOptions.pobRoot)
-    local host = cliOptions.host or options.host or os.getenv("POB_SERVER_HOST") or "*"
-    local port = cliOptions.port or options.port or tonumber(os.getenv("POB_SERVER_PORT")) or 8080
+
+    redirectLogsToStderr()
 
     local build = initializePob(repositoryRoot, pobRoot)
     local runtimeFlavor = detectRuntimeFlavor(build, pobRoot)
     local runtimeHandler = loadRuntimeHandler(repositoryRoot, runtimeFlavor)
     local runtimeContext = runtimeHandler.initialize(build, repositoryRoot, loadSharedModule)
-    local httpServer = loadHttpServer(repositoryRoot)
 
-    httpServer.serve({
-        host = host,
-        port = port,
-        handleRequest = function(client, request, responders)
-            if request.method ~= "POST" then
-                responders.sendError(client, "405 Method Not Allowed", "Only POST supported.")
-            end
+    io.stdout:write("#POB READY\n")
+    io.stdout:flush()
 
-            if request.path and request.path:match("/update%-config$") then
-                runtimeHandler.handleUpdateConfig(runtimeContext, client, request.body, responders)
-            else
-                runtimeHandler.handleImportCharacter(runtimeContext, client, request.body, responders)
-            end
-        end,
-    })
+    local endpoint, body = readJob()
+    if not endpoint then
+        os.exit(0)
+    end
+
+    local ok, status, responseBody = pcall(function()
+        if endpoint == "update-config" then
+            return runtimeHandler.handleUpdateConfig(runtimeContext, body)
+        end
+        return runtimeHandler.handleImportCharacter(runtimeContext, body)
+    end)
+
+    if not ok then
+        print("REQUEST FAILED: " .. tostring(status))
+        writeResponse(500, "Internal server error.")
+        os.exit(1)
+    end
+
+    writeResponse(status, responseBody)
+    os.exit(0)
 end
 
-return serve
+return runWorker

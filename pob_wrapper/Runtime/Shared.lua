@@ -136,7 +136,13 @@ function Shared.decodePobCode(body)
     end
 
     local pobCode = body:gsub("^%s+", ""):gsub("%s+$", "")
-    return Inflate(common.base64.decode(pobCode:gsub("-", "+"):gsub("_", "/")))
+    local ok, xmlText = pcall(function()
+        return Inflate(common.base64.decode(pobCode:gsub("-", "+"):gsub("_", "/")))
+    end)
+    if not ok then
+        return nil
+    end
+    return xmlText
 end
 
 return Shared

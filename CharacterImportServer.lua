@@ -13,7 +13,7 @@ local function getScriptDir()
 end
 
 local repositoryRoot = getScriptDir()
-local runServer = assert(loadfile(repositoryRoot .. "/pob_server/CharacterImportServer.lua"))()
+local runServer = assert(loadfile(repositoryRoot .. "/pob_wrapper/CharacterImportService.lua"))()
 
 runServer({
     repositoryRoot = repositoryRoot,

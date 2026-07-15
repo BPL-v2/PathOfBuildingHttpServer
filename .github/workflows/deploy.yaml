@@ -13,14 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - game: poe1
-            pob_repository: PathOfBuildingCommunity/PathOfBuilding
-          - game: poe2
-            pob_repository: PathOfBuildingCommunity/PathOfBuilding-PoE2
 
     steps:
       - name: Checkout server repository
@@ -29,12 +21,24 @@ jobs:
           fetch-depth: 1
           path: app
 
-      - name: Checkout latest PoB runtime
+      - name: Checkout latest PoE1 runtime
         uses: actions/checkout@v4
         with:
-          repository: ${{ matrix.pob_repository }}
+          repository: PathOfBuildingCommunity/PathOfBuilding
           fetch-depth: 1
-          path: pob
+          path: pob-poe1
+          sparse-checkout: |
+            src
+            runtime/lua
+            manifest.xml
+            manifest.cfg
+
+      - name: Checkout latest PoE2 runtime
+        uses: actions/checkout@v4
+        with:
+          repository: PathOfBuildingCommunity/PathOfBuilding-PoE2
+          fetch-depth: 1
+          path: pob-poe2
           sparse-checkout: |
             src
             runtime/lua
@@ -45,18 +49,26 @@ jobs:
         id: meta
         run: |
           echo "app_sha=$(git -C app rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "pob_sha=$(git -C pob rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "pob_sha_short=$(git -C pob rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "poe1_sha=$(git -C pob-poe1 rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "poe2_sha=$(git -C pob-poe2 rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "poe1_sha_short=$(git -C pob-poe1 rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "poe2_sha_short=$(git -C pob-poe2 rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Prepare Docker build context
         run: |
-          mkdir -p build-context/PathOfBuilding/runtime
-          rsync -a app/CharacterImportServer.lua app/pob_server app/Dockerfile build-context/
-          rsync -a pob/src build-context/PathOfBuilding/
-          rsync -a pob/runtime/lua build-context/PathOfBuilding/runtime/
-          rsync -a pob/manifest.xml build-context/PathOfBuilding/
-          if [ -f pob/manifest.cfg ]; then
-            rsync -a pob/manifest.cfg build-context/PathOfBuilding/
+          mkdir -p build-context/PathOfBuilding/runtime build-context/PathOfBuilding-PoE2/runtime
+          rsync -a app/CharacterImportService.lua app/pob_wrapper app/Dockerfile app/go.mod app/go.sum app/main.go app/metrics.go build-context/
+          rsync -a pob-poe1/src build-context/PathOfBuilding/
+          rsync -a pob-poe1/runtime/lua build-context/PathOfBuilding/runtime/
+          rsync -a pob-poe1/manifest.xml build-context/PathOfBuilding/
+          if [ -f pob-poe1/manifest.cfg ]; then
+            rsync -a pob-poe1/manifest.cfg build-context/PathOfBuilding/
+          fi
+          rsync -a pob-poe2/src build-context/PathOfBuilding-PoE2/
+          rsync -a pob-poe2/runtime/lua build-context/PathOfBuilding-PoE2/runtime/
+          rsync -a pob-poe2/manifest.xml build-context/PathOfBuilding-PoE2/
+          if [ -f pob-poe2/manifest.cfg ]; then
+            rsync -a pob-poe2/manifest.cfg build-context/PathOfBuilding-PoE2/
           fi
 
       - name: Set up Docker Buildx
@@ -75,16 +87,15 @@ jobs:
           file: build-context/Dockerfile
           push: true
           tags: |
-            ${{ vars.DOCKER_USERNAME }}/pob-server:${{ matrix.game }}-latest
-            ${{ vars.DOCKER_USERNAME }}/pob-server:${{ matrix.game }}-${{ steps.meta.outputs.pob_sha_short }}
+            ${{ vars.DOCKER_USERNAME }}/pob-server:latest
+            ${{ vars.DOCKER_USERNAME }}/pob-server:poe1-${{ steps.meta.outputs.poe1_sha_short }}-poe2-${{ steps.meta.outputs.poe2_sha_short }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ steps.meta.outputs.app_sha }}
-            org.opencontainers.image.version=${{ matrix.game }}-${{ steps.meta.outputs.pob_sha_short }}
-            pob.repository=${{ matrix.pob_repository }}
-            pob.revision=${{ steps.meta.outputs.pob_sha }}
-          cache-from: type=gha,scope=${{ matrix.game }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.game }}
+            pob.poe1.revision=${{ steps.meta.outputs.poe1_sha }}
+            pob.poe2.revision=${{ steps.meta.outputs.poe2_sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   notify-watchtower:
     runs-on: ubuntu-latest

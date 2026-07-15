@@ -139,13 +139,12 @@ function Runtime.initialize(build, repositoryRoot, loadSharedModule)
     }
 end
 
-function Runtime.handleUpdateConfig(context, client, body, responders)
+function Runtime.handleUpdateConfig(context, body)
     local startTime = GetTime()
     local xmlText = Shared.decodePobCode(body)
     if not xmlText then
         print("update-config failed: invalid PoB code")
-        responders.sendError(client, "400 Bad Request", "Invalid PoB code.")
-        return
+        return 400, "Invalid PoB code."
     end
 
     local ok, result = pcall(function()
@@ -162,22 +161,20 @@ function Runtime.handleUpdateConfig(context, client, body, responders)
 
     if not ok then
         print("update-config failed: " .. tostring(result))
-        responders.sendError(client, "400 Bad Request", tostring(result))
-        return
+        return 400, tostring(result)
     end
 
-    ConPrintf("PoB auto config processed in %.3f seconds", GetTime() - startTime)
-    responders.sendResponse(client, "200 OK", "text/plain", result)
+    print(string.format("PoB auto config processed in %.3f seconds", GetTime() - startTime))
+    return 200, result
 end
 
-function Runtime.handleImportCharacter(context, client, body, responders)
+function Runtime.handleImportCharacter(context, body)
     local json = Shared.loadJsonModule()
     local startTime = GetTime()
     local ok, character = pcall(json.decode, body)
     if not ok or not character then
         print("import failed: invalid JSON body")
-        responders.sendError(client, "400 Bad Request", "Invalid JSON. Expecting PoB character JSON.")
-        return
+        return 400, "Invalid JSON. Expecting PoB character JSON."
     end
 
     local characterName = tostring(character.name)
@@ -228,12 +225,11 @@ function Runtime.handleImportCharacter(context, client, body, responders)
 
     if not success then
         print("error processing character " .. characterName .. ": " .. tostring(result))
-        responders.sendError(client, "400 Bad Request", tostring(result))
-        return
+        return 400, tostring(result)
     end
 
     print(string.format("character %s processed in %.3f seconds", characterName, GetTime() - startTime))
-    responders.sendResponse(client, "200 OK", "text/plain", result)
+    return 200, result
 end
 
 return Runtime
