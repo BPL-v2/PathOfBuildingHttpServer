@@ -24,9 +24,10 @@ local function selectHighestFullDpsSocketGroup(build)
         return
     end
 
-    if not build.calcsTab.mainOutput or not build.calcsTab.mainEnv then
-        build.calcsTab:BuildOutput()
+    for _, socketGroup in ipairs(socketGroupList) do
+        socketGroup.includeInFullDPS = true
     end
+    build.calcsTab:BuildOutput()
 
     local skillDpsList = build.calcsTab.mainOutput and build.calcsTab.mainOutput.SkillDPS
     local activeSkillList = build.calcsTab.mainEnv and build.calcsTab.mainEnv.player and build.calcsTab.mainEnv.player.activeSkillList
@@ -71,7 +72,7 @@ local function selectHighestFullDpsSocketGroup(build)
                 end
             end
         end
-
+        
         if matchedSocketGroup and skillDps > bestDps then
             bestDps = skillDps
             bestSocketGroup = matchedSocketGroup
