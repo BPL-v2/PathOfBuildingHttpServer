@@ -3,7 +3,31 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"time"
 )
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+	r.ResponseWriter.WriteHeader(status)
+}
+
+// instrumentHandler wraps h to record request count, duration and status
+// code under the given handler label.
+func instrumentHandler(handlerLabel string, h http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		rec := &statusRecorder{ResponseWriter: rw, status: http.StatusOK}
+		start := time.Now()
+		h.ServeHTTP(rec, req)
+		httpRequestDuration.WithLabelValues(handlerLabel, req.Method).Observe(time.Since(start).Seconds())
+		httpRequestsTotal.WithLabelValues(handlerLabel, req.Method, strconv.Itoa(rec.status)).Inc()
+	})
+}
 
 func healthHandler(p *pool) http.Handler {
 	return http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {

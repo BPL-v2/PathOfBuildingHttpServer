@@ -57,11 +57,11 @@ func main() {
 	p := newPool(envIntOr("POB_WORKERS", 4), prewarm, cfg, flavors)
 	mux := http.NewServeMux()
 	for _, f := range flavors {
-		mux.Handle("/"+f.name+"/", p.handler(f))
+		mux.Handle("/"+f.name+"/", instrumentHandler(f.name, p.handler(f)))
 	}
-	mux.Handle("/healthz", healthHandler(p))
+	mux.Handle("/healthz", instrumentHandler("healthz", healthHandler(p)))
 	prometheus.MustRegister(newWorkerCollector(p))
-	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/metrics", instrumentHandler("metrics", promhttp.Handler()))
 
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

@@ -27,6 +27,21 @@ var (
 		Help:    "Time from worker spawn to READY.",
 		Buckets: []float64{0.5, 1, 2, 5, 10, 30, 60, 120},
 	}, []string{"game"})
+
+	// HTTP-level metrics, covering every registered handler (including
+	// /healthz and /metrics). Unlike pob_job_duration_seconds/pob_jobs_total,
+	// these measure full request wall time, including time spent queueing
+	// for a worker or rejected outright while the pool is busy.
+	httpRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "pob_http_requests_total",
+		Help: "HTTP requests handled, by handler, method and status code.",
+	}, []string{"handler", "method", "status"})
+
+	httpRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "pob_http_request_duration_seconds",
+		Help:    "HTTP request duration by handler and method.",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120},
+	}, []string{"handler", "method"})
 )
 
 // readProcStat returns the resident set size and the accumulated CPU time of
