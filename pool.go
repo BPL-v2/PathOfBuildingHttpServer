@@ -24,13 +24,17 @@ type response struct {
 	body   []byte
 }
 
-// workerProc is one luajit worker process.
+// workerProc is one luajit worker process. Workers are persistent: a single
+// process handles many sequential jobs (see jobsDone/retirement in the
+// pool), not just one - respawning the whole PoB runtime (tree/mod/item
+// data) per request is what made the old one-shot-per-request design slow.
 type workerProc struct {
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	ready  chan struct{} // closed when READY is seen
-	resp   chan response // buffered(1), receives the single job response
-	exited chan struct{} // closed when stdout reaches EOF (process is gone)
+	cmd      *exec.Cmd
+	stdin    io.WriteCloser
+	ready    chan struct{} // closed when READY is seen
+	resp     chan response // buffered(1), receives the next job's response
+	exited   chan struct{} // closed when stdout reaches EOF (process is gone)
+	jobsDone int           // requests served so far; only touched by the current owner
 }
 
 func (w *workerProc) kill() {
@@ -40,7 +44,22 @@ func (w *workerProc) kill() {
 	}
 }
 
-// execute sends the one job to the worker and waits for its response.
+// retire closes stdin so the worker sees EOF on its next readJob and exits
+// cleanly, instead of being offered another job.
+func (w *workerProc) retire() {
+	w.stdin.Close()
+	go func() {
+		select {
+		case <-w.exited:
+		case <-time.After(10 * time.Second):
+			w.kill()
+		}
+	}()
+}
+
+// execute sends one job to the worker and waits for its response. The
+// worker remains alive afterwards, ready for another job, until the caller
+// retires it.
 func (w *workerProc) execute(endpoint string, body []byte, timeout time.Duration) (response, error) {
 	if _, err := fmt.Fprintf(w.stdin, "%s %d\n", endpoint, len(body)); err != nil {
 		return response{}, fmt.Errorf("writing job header: %w", err)
@@ -53,15 +72,7 @@ func (w *workerProc) execute(endpoint string, body []byte, timeout time.Duration
 	defer timer.Stop()
 	select {
 	case resp := <-w.resp:
-		w.stdin.Close()
-		// The worker exits on its own after responding; make sure of it.
-		go func() {
-			select {
-			case <-w.exited:
-			case <-time.After(10 * time.Second):
-				w.kill()
-			}
-		}()
+		w.jobsDone++
 		return resp, nil
 	case <-w.exited:
 		return response{}, errors.New("worker exited before responding")
@@ -125,9 +136,12 @@ func newPool(size int, prewarm bool, cfg config, flavors []*flavor) *pool {
 		f.warm = make(chan *workerProc, size)
 		f.liveCPU = map[int]float64{}
 	}
-	// Start counted as active so the pool warms up at boot and only scales
-	// down after a full idle window without requests.
-	p.lastRequest.Store(time.Now().UnixNano())
+	// lastRequest is left at its zero value, so the pool starts out already
+	// "idle" (decades past any idleTimeout) rather than warming up eagerly.
+	// runSlot's waitUntilActive parks every slot until the first real
+	// request calls touch(), so workers only spin up on actual demand -
+	// no eager memory/CPU spike at boot (e.g. during a rolling deploy where
+	// old and new pods briefly overlap).
 	return p
 }
 
@@ -409,14 +423,20 @@ func (p *pool) acquireCold(ctx context.Context, f *flavor) (*workerProc, func(),
 	case <-ctx.Done():
 		return nil, nil, ctx.Err()
 	}
-	release := func() { <-p.coldSlots }
+	freeSlot := func() { <-p.coldSlots }
 
 	started := time.Now()
 	w, err := p.spawn(f)
 	if err != nil {
 		f.failures.Add(1)
-		release()
+		freeSlot()
 		return nil, nil, fmt.Errorf("spawning worker: %w", err)
+	}
+	// Cold workers aren't pooled for reuse (that's the whole point of
+	// prewarm being off), so always retire after the one job.
+	release := func() {
+		w.retire()
+		freeSlot()
 	}
 
 	startTimer := time.NewTimer(p.cfg.startTimeout)
@@ -428,16 +448,16 @@ func (p *pool) acquireCold(ctx context.Context, f *flavor) (*workerProc, func(),
 		return w, release, nil
 	case <-w.exited:
 		f.failures.Add(1)
-		release()
+		freeSlot()
 		return nil, nil, errors.New("worker exited before becoming ready")
 	case <-startTimer.C:
 		w.kill()
 		f.failures.Add(1)
-		release()
+		freeSlot()
 		return nil, nil, errors.New("worker did not become ready in time")
 	case <-ctx.Done():
 		w.kill()
-		release()
+		freeSlot()
 		return nil, nil, ctx.Err()
 	}
 }
@@ -463,6 +483,29 @@ func (p *pool) acquire(ctx context.Context, f *flavor) (*workerProc, error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
+	}
+}
+
+// releaseWorker returns a used warm worker to the pool for reuse, unless it
+// has already died or has served its quota of jobs - in which case it is
+// retired so fillSlot spawns a fresh replacement.
+func (p *pool) releaseWorker(f *flavor, w *workerProc) {
+	select {
+	case <-w.exited:
+		return
+	default:
+	}
+	if p.cfg.maxJobsPerWorker > 0 && w.jobsDone >= p.cfg.maxJobsPerWorker {
+		f.logf("worker pid %d retiring after %d jobs", w.cmd.Process.Pid, w.jobsDone)
+		w.retire()
+		return
+	}
+	select {
+	case f.warm <- w:
+	default:
+		// f.warm is already at capacity; shouldn't normally happen since
+		// each worker has exactly one owning slot, but don't leak it.
+		w.retire()
 	}
 }
 
@@ -505,10 +548,18 @@ func (p *pool) handler(f *flavor) http.Handler {
 		if err != nil {
 			jobsTotal.WithLabelValues(f.name, endpoint, "error").Inc()
 			f.logf("%s failed: %v", endpoint, err)
+			if p.prewarm {
+				// Its state after a failed/timed-out job is untrustworthy;
+				// don't hand it to another request.
+				w.retire()
+			}
 			http.Error(rw, "PoB backend request failed.", http.StatusBadGateway)
 			return
 		}
 		jobsTotal.WithLabelValues(f.name, endpoint, strconv.Itoa(resp.status)).Inc()
+		if p.prewarm {
+			p.releaseWorker(f, w)
+		}
 		rw.Header().Set("Content-Type", "text/plain")
 		rw.WriteHeader(resp.status)
 		rw.Write(resp.body)

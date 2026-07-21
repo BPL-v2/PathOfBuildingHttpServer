@@ -8,13 +8,14 @@ import (
 )
 
 type config struct {
-	listenAddr   string
-	luajitBin    string
-	entry        string
-	startTimeout time.Duration // worker boot -> READY
-	jobTimeout   time.Duration // job sent -> response
-	queueTimeout time.Duration // request waiting for a warm worker
-	idleTimeout  time.Duration // no requests -> shut down warm workers (0: never)
+	listenAddr       string
+	luajitBin        string
+	entry            string
+	startTimeout     time.Duration // worker boot -> READY
+	jobTimeout       time.Duration // job sent -> response
+	queueTimeout     time.Duration // request waiting for a warm worker
+	idleTimeout      time.Duration // no requests -> shut down warm workers (0: never)
+	maxJobsPerWorker int           // requests a warm worker serves before being retired (0: unlimited)
 }
 
 func envOr(key, fallback string) string {

@@ -190,9 +190,14 @@ local function writeResponse(status, body)
     io.stdout:flush()
 end
 
--- One-shot worker: initialize PoB, announce readiness, handle exactly one
--- job from stdin, respond on stdout, exit. The Go supervisor keeps a pool of
--- pre-warmed workers, so every request runs against fresh PoB state.
+-- Persistent worker: initialize PoB once (this is the expensive part -
+-- loading the passive tree, mod cache and item/unique databases), announce
+-- readiness, then keep handling jobs from stdin until the Go supervisor
+-- closes it (idle reap or retirement past its job quota) or stdin hits EOF.
+-- Every job still runs against fresh build state - handleImportCharacter and
+-- handleUpdateConfig both reset the build (Shutdown+Init) before touching
+-- it - but the tree/mod/item data loaded by initializePob stays warm across
+-- requests instead of being reloaded from scratch every time.
 local function runWorker(options)
     local cliOptions = parseArgs(arg or {})
     local repositoryRoot = trimTrailingSlash(assert(options.repositoryRoot, "Missing repositoryRoot"))
@@ -208,26 +213,30 @@ local function runWorker(options)
     io.stdout:write("#POB READY\n")
     io.stdout:flush()
 
-    local endpoint, body = readJob()
-    if not endpoint then
-        os.exit(0)
-    end
-
-    local ok, status, responseBody = pcall(function()
-        if endpoint == "update-config" then
-            return runtimeHandler.handleUpdateConfig(runtimeContext, body)
+    while true do
+        local endpoint, body = readJob()
+        if not endpoint then
+            os.exit(0)
         end
-        return runtimeHandler.handleImportCharacter(runtimeContext, body)
-    end)
 
-    if not ok then
-        print("REQUEST FAILED: " .. tostring(status))
-        writeResponse(500, "Internal server error.")
-        os.exit(1)
+        local ok, status, responseBody = pcall(function()
+            if endpoint == "update-config" then
+                return runtimeHandler.handleUpdateConfig(runtimeContext, body)
+            end
+            return runtimeHandler.handleImportCharacter(runtimeContext, body)
+        end)
+
+        if not ok then
+            print("REQUEST FAILED: " .. tostring(status))
+            writeResponse(500, "Internal server error.")
+            -- An unexpected (non-pcall'd-by-the-handler) error may have left
+            -- process-global state in a bad spot; don't risk reusing it.
+            os.exit(1)
+        end
+
+        writeResponse(status, responseBody)
+        collectgarbage("collect")
     end
-
-    writeResponse(status, responseBody)
-    os.exit(0)
 end
 
 return runWorker

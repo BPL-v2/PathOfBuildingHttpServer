@@ -73,6 +73,11 @@ function Runtime.handleImportCharacter(context, body)
 
     local success, result = pcall(function()
         local build = context.build
+        -- Workers are reused across many requests, so start every import from
+        -- the same blank-build state a brand new process would have (this is
+        -- the same reset primitive handleUpdateConfig already relies on).
+        build:Shutdown()
+        build:Init(false, "Imported build")
         build.importTab.lastLeague = character.league
         build.importTab:ImportItemsAndSkills(character)
         build.importTab:ImportPassiveTreeAndJewels(character)
