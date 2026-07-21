@@ -146,8 +146,12 @@ func newPool(size int, prewarm bool, cfg config, flavors []*flavor) *pool {
 }
 
 // pickFlavor decides which game the next worker should boot: the flavor with
-// the most unserved demand (waiting requests minus committed slots), falling
-// back to keeping the flavors evenly staffed when nobody is waiting.
+// the most unserved demand (waiting requests minus committed slots). Returns
+// nil when no flavor has any unmet demand, so a woken slot doesn't
+// speculatively spawn a worker nobody asked for - touch() wakes every parked
+// slot on any single request (pool-wide idle/active is not tracked
+// per-flavor), so without this check, slots beyond the one actually needed
+// would fall through to spreading themselves evenly across flavors.
 func (p *pool) pickFlavor() *flavor {
 	var best *flavor
 	var bestScore, bestSlots int64
@@ -157,6 +161,9 @@ func (p *pool) pickFlavor() *flavor {
 		if best == nil || score > bestScore || (score == bestScore && slots < bestSlots) {
 			best, bestScore, bestSlots = f, score, slots
 		}
+	}
+	if bestScore <= 0 {
+		return nil
 	}
 	return best
 }
@@ -342,6 +349,15 @@ func (p *pool) runSlot(ctx context.Context, wg *sync.WaitGroup) {
 			return
 		}
 		f := p.pickFlavor()
+		if f == nil {
+			// Woken, but no flavor currently has unmet demand; avoid
+			// busy-spinning until real work shows up or the pool goes
+			// idle enough to park again.
+			if !sleepCtx(ctx, 50*time.Millisecond) {
+				return
+			}
+			continue
+		}
 		f.slots.Add(1)
 		if !p.fillSlot(ctx, f, &backoff) {
 			f.slots.Add(-1)
@@ -463,8 +479,11 @@ func (p *pool) acquireCold(ctx context.Context, f *flavor) (*workerProc, func(),
 }
 
 func (p *pool) acquire(ctx context.Context, f *flavor) (*workerProc, error) {
-	// pending steers freed slots toward this flavor while we wait.
+	// pending steers freed slots toward this flavor while we wait. Must be
+	// set before touch() wakes parked slots, otherwise pickFlavor sees no
+	// demand yet and falls back to spreading slots evenly across flavors.
 	f.pending.Add(1)
+	p.touch()
 	defer f.pending.Add(-1)
 	timer := time.NewTimer(p.cfg.queueTimeout)
 	defer timer.Stop()
@@ -527,7 +546,6 @@ func (p *pool) handler(f *flavor) http.Handler {
 
 		var w *workerProc
 		if p.prewarm {
-			p.touch()
 			w, err = p.acquire(req.Context(), f)
 		} else {
 			var release func()
