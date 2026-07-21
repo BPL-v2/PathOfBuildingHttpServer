@@ -27,59 +27,29 @@ local configKeysToReset = {
     "DisableEHPGainOnBlock",
 }
 
-local function normalizeAlternateAscendancy(value)
-    return tonumber(value) or 0
-end
-
-local function normalizeBandit(value)
-    local validBandits = {
-        None = true,
-        Oak = true,
-        Kraityn = true,
-        Alira = true,
-    }
-    if type(value) == "string" and validBandits[value] then
+local function normalizeTable(value)
+    if type(value) == "table" then
         return value
     end
-    return "None"
+    return { }
 end
 
-local pantheonNameToKey = {
-    ["The Brine King"] = "TheBrineKing",
-    ["Lunaris"] = "Lunaris",
-    ["Solaris"] = "Solaris",
-    ["Arakaali"] = "Arakaali",
-    ["Gruthkul"] = "Gruthkul",
-    ["Yugul"] = "Yugul",
-    ["Abberath"] = "Abberath",
-    ["Tukohama"] = "Tukohama",
-    ["Garukhan"] = "Garukhan",
-    ["Ralakesh"] = "Ralakesh",
-    ["Ryslatha"] = "Ryslatha",
-    ["Shakari"] = "Shakari",
-}
-
-local function normalizePantheon(value)
-    if type(value) ~= "string" then
-        return "None"
-    end
-    if value == "None" then
-        return "None"
-    end
-    if data and data.pantheons and data.pantheons[value] then
-        return value
-    end
-    local mappedValue = pantheonNameToKey[value]
-    if mappedValue and data and data.pantheons and data.pantheons[mappedValue] then
-        return mappedValue
-    end
-    return "None"
+local function normalizeCharacterData(character)
+    character = character or { }
+    character.equipment = normalizeTable(character.equipment)
+    character.jewels = normalizeTable(character.jewels)
+    character.passives = normalizeTable(character.passives)
+    character.passives.hashes = normalizeTable(character.passives.hashes)
+    character.passives.hashes_ex = normalizeTable(character.passives.hashes_ex)
+    character.passives.mastery_effects = normalizeTable(character.passives.mastery_effects)
+    character.passives.skill_overrides = normalizeTable(character.passives.skill_overrides)
+    character.passives.jewel_data = normalizeTable(character.passives.jewel_data)
+    return character
 end
 
 local function buildClassIndex(build)
     local classToId = { }
     local ascendancyToClass = { }
-    local ascendancyToId = { }
     local treeClasses = build and build.spec and build.spec.tree and build.spec.tree.classes
     if not treeClasses then
         error("PoB runtime did not expose passive tree classes.")
@@ -95,7 +65,6 @@ local function buildClassIndex(build)
                         and type(ascendancy) == "table"
                         and type(ascendancy.name) == "string" then
                         ascendancyToClass[ascendancy.name] = class.name
-                        ascendancyToId[ascendancy.name] = ascendancyId
                     end
                 end
             end
@@ -105,26 +74,23 @@ local function buildClassIndex(build)
     return {
         classToId = classToId,
         ascendancyToClass = ascendancyToClass,
-        ascendancyToId = ascendancyToId,
     }
 end
 
-local function resolveCharacterClass(characterClassName, classIndex)
+-- Validates that the character's class/ascendancy is known to this PoB runtime.
+-- ImportTab.lua resolves the actual class/ascendancy ids from the name itself,
+-- this is just here to produce a friendlier error than whatever it would fall
+-- back to internally when the name doesn't match anything.
+local function validateCharacterClass(characterClassName, classIndex)
     if type(characterClassName) ~= "string" or characterClassName == "" then
-        return nil, nil, "Character is missing class information."
+        return "Character is missing class information."
     end
 
-    local baseClassName = classIndex.ascendancyToClass[characterClassName]
-    if baseClassName then
-        return classIndex.classToId[baseClassName], classIndex.ascendancyToId[characterClassName]
+    if classIndex.ascendancyToClass[characterClassName] or classIndex.classToId[characterClassName] then
+        return nil
     end
 
-    local classId = classIndex.classToId[characterClassName]
-    if classId ~= nil then
-        return classId, 0
-    end
-
-    return nil, nil, "Unsupported character class '" .. characterClassName .. "' for this PoB runtime."
+    return "Unsupported character class '" .. characterClassName .. "' for this PoB runtime."
 end
 
 local Runtime = {
@@ -177,48 +143,20 @@ function Runtime.handleImportCharacter(context, body)
         return 400, "Invalid JSON. Expecting PoB character JSON."
     end
 
+    character = normalizeCharacterData(character)
     local characterName = tostring(character.name)
     print("processing character " .. characterName)
 
     local success, result = pcall(function()
-        local characterClass, ascendancy, classError = resolveCharacterClass(character.class, context.classIndex)
+        local classError = validateCharacterClass(character.class, context.classIndex)
         if classError then
             error(classError, 0)
         end
 
-        local itemsJson = json.encode({
-            items = character.equipment or {},
-            jewels = character.jewels or {},
-            character = {
-                name = character.name,
-                realm = character.realm,
-                class = character.class,
-                league = character.league,
-                level = character.level,
-            },
-        })
-
-        local passives = character.passives or {}
-        local treeJson = json.encode({
-            character = characterClass,
-            ascendancy = ascendancy,
-            alternate_ascendancy = normalizeAlternateAscendancy(passives.alternate_ascendancy),
-            hashes = passives.hashes or {},
-            hashes_ex = passives.hashes_ex or {},
-            mastery_effects = passives.mastery_effects or {},
-            skill_overrides = passives.skill_overrides or {},
-            items = character.jewels or {},
-            jewel_data = passives.jewel_data or {},
-        })
-
         local build = context.build
         build.importTab.lastLeague = character.league
-        local charDataObj = build.importTab:ImportItemsAndSkills(itemsJson)
-        build.importTab:ImportPassiveTreeAndJewels(treeJson, charDataObj)
-
-        build.configTab.input.bandit = normalizeBandit(passives.bandit_choice)
-        build.configTab.input.pantheonMajorGod = normalizePantheon(passives.pantheon_major)
-        build.configTab.input.pantheonMinorGod = normalizePantheon(passives.pantheon_minor)
+        build.importTab:ImportItemsAndSkills(character, true, true, false)
+        build.importTab:ImportPassiveTreeAndJewels(character, true)
 
         return Shared.applyConfigAndExport(build, context.configAutoDetect)
     end)

@@ -50,7 +50,7 @@ sync_checkout() {
 
   git -C "${target_dir}" remote set-url origin "${repo_url}"
   git -C "${target_dir}" sparse-checkout init --cone >/dev/null 2>&1 || true
-  git -C "${target_dir}" sparse-checkout set "${SPARSE_PATHS[@]}"
+  git -C "${target_dir}" sparse-checkout set --skip-checks "${SPARSE_PATHS[@]}"
   git -C "${target_dir}" fetch --depth=1 origin "${default_branch}"
   git -C "${target_dir}" checkout --force -B local-dev-sync FETCH_HEAD
 

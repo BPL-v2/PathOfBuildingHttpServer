@@ -71,6 +71,11 @@ jobs:
             rsync -a pob-poe2/manifest.cfg build-context/PathOfBuilding-PoE2/
           fi
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/go.mod
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -80,12 +85,13 @@ jobs:
           username: ${{ vars.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build and push Docker image
+      - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: build-context
           file: build-context/Dockerfile
-          push: true
+          push: false
+          load: true
           tags: |
             ${{ vars.DOCKER_USERNAME }}/pob-server:latest
             ${{ vars.DOCKER_USERNAME }}/pob-server:poe1-${{ steps.meta.outputs.poe1_sha_short }}-poe2-${{ steps.meta.outputs.poe2_sha_short }}
@@ -96,6 +102,20 @@ jobs:
             pob.poe2.revision=${{ steps.meta.outputs.poe2_sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke test image
+        working-directory: app
+        env:
+          POB_SMOKE_BASE_URL: http://localhost:8080
+        run: |
+          docker run -d --name smoketest -p 8080:8080 "${{ vars.DOCKER_USERNAME }}/pob-server:latest"
+          trap 'docker logs smoketest || true; docker rm -f smoketest || true' EXIT
+          go test -tags smoke ./... -run TestSmokeEndpoints -v
+
+      - name: Push Docker image
+        run: |
+          docker push "${{ vars.DOCKER_USERNAME }}/pob-server:latest"
+          docker push "${{ vars.DOCKER_USERNAME }}/pob-server:poe1-${{ steps.meta.outputs.poe1_sha_short }}-poe2-${{ steps.meta.outputs.poe2_sha_short }}"
 
   notify-watchtower:
     runs-on: ubuntu-latest
