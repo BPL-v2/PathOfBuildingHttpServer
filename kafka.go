@@ -23,16 +23,20 @@ type pobKafkaRequest struct {
 	CharacterID string          `json:"character_id"`
 	Game        string          `json:"game"`
 	Character   json.RawMessage `json:"character"`
+	QueuedAt    time.Time       `json:"queued_at"`
 }
 
 // pobKafkaResult is published to the pob-results topic.
 // Character echoes the original request payload so the backend can reconstruct
-// the CharacterPob entity without an extra DB lookup.
+// the CharacterPob entity without an extra DB lookup. QueuedAt echoes the
+// request's original enqueue time so the backend can persist against when the
+// character was queued rather than when this result was produced.
 type pobKafkaResult struct {
-	CharacterID string `json:"character_id"`
-	Character   string `json:"character,omitempty"`
-	Export      string `json:"export"`
-	Error       string `json:"error,omitempty"`
+	CharacterID string    `json:"character_id"`
+	Character   string    `json:"character,omitempty"`
+	Export      string    `json:"export"`
+	Error       string    `json:"error,omitempty"`
+	QueuedAt    time.Time `json:"queued_at"`
 }
 
 // runKafkaConsumer reads character data from the pob-requests topic, processes
@@ -110,6 +114,7 @@ func processKafkaRequest(ctx context.Context, p *pool, data []byte) pobKafkaResu
 		return pobKafkaResult{
 			CharacterID: req.CharacterID,
 			Error:       fmt.Sprintf("unknown game %q", req.Game),
+			QueuedAt:    req.QueuedAt,
 		}
 	}
 
@@ -118,6 +123,7 @@ func processKafkaRequest(ctx context.Context, p *pool, data []byte) pobKafkaResu
 		return pobKafkaResult{
 			CharacterID: req.CharacterID,
 			Error:       err.Error(),
+			QueuedAt:    req.QueuedAt,
 		}
 	}
 
@@ -125,6 +131,7 @@ func processKafkaRequest(ctx context.Context, p *pool, data []byte) pobKafkaResu
 		CharacterID: req.CharacterID,
 		Character:   string(req.Character),
 		Export:      string(export),
+		QueuedAt:    req.QueuedAt,
 	}
 }
 
