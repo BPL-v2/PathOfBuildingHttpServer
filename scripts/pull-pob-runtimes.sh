@@ -5,11 +5,35 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-SPARSE_PATHS=(
-  src
-  runtime/lua
-  manifest.xml
-  manifest.cfg
+# Non-cone patterns (gitignore-style, supports negation): pull in src/ and
+# friends, but exclude the GUI's tree/item sprite images. The headless server
+# never renders anything (HeadlessShims.lua stubs ImageHandle:Load() as a
+# no-op), so those images are dead weight - they account for the large
+# majority of PathOfBuilding's checkout size (TreeData alone is ~500MB with
+# images vs ~135MB without).
+SPARSE_PATTERNS=(
+  "/src/*"
+  "/src/TreeData/"
+  "/src/TreeData/**"
+  "!/src/TreeData/**/*.png"
+  "!/src/TreeData/**/*.jpg"
+  "!/src/TreeData/**/*.webp"
+  "!/src/TreeData/**/*.dds.zst"
+  "/src/Data/"
+  "/src/Data/**"
+  "!/src/Data/**/*.png"
+  "!/src/Data/**/*.jpg"
+  "!/src/Data/**/*.webp"
+  "!/src/Data/**/*.dds.zst"
+  "/src/Assets/"
+  "/src/Assets/**"
+  "!/src/Assets/**/*.png"
+  "!/src/Assets/**/*.jpg"
+  "!/src/Assets/**/*.webp"
+  "!/src/Assets/**/*.dds.zst"
+  "/runtime/lua/"
+  "/manifest.xml"
+  "/manifest.cfg"
 )
 
 resolve_default_branch() {
@@ -49,8 +73,8 @@ sync_checkout() {
   fi
 
   git -C "${target_dir}" remote set-url origin "${repo_url}"
-  git -C "${target_dir}" sparse-checkout init --cone >/dev/null 2>&1 || true
-  git -C "${target_dir}" sparse-checkout set --skip-checks "${SPARSE_PATHS[@]}"
+  git -C "${target_dir}" sparse-checkout init --no-cone >/dev/null 2>&1 || true
+  printf '%s\n' "${SPARSE_PATTERNS[@]}" > "${target_dir}/.git/info/sparse-checkout"
   git -C "${target_dir}" fetch --depth=1 origin "${default_branch}"
   git -C "${target_dir}" checkout --force -B local-dev-sync FETCH_HEAD
 

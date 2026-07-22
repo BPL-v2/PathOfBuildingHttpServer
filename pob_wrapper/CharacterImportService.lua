@@ -127,6 +127,12 @@ local function initializePob(repositoryRoot, pobRoot)
         error(mainObject.promptMsg)
     end
 
+    -- Only safe to patch now: OnInit is what loads Modules/Main, which in
+    -- turn requires Modules/Common and populates the global `common` table
+    -- (common.xml = require("xml")) that we're overriding a method on.
+    local installDeterministicXML = loadSharedModule(repositoryRoot, "Modules", "DeterministicXML.lua")()
+    installDeterministicXML()
+
     return mainObject.main.modes["BUILD"]
 end
 

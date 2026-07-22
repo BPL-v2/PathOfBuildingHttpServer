@@ -8,7 +8,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -578,10 +580,46 @@ func (p *pool) handler(f *flavor) http.Handler {
 		if p.prewarm {
 			p.releaseWorker(f, w)
 		}
+		if p.cfg.debugXMLDiff && endpoint == "update-config" && resp.status == http.StatusOK {
+			writeXMLDiff(f, p.cfg.debugXMLDiffDir, body, resp.body)
+		}
 		rw.Header().Set("Content-Type", "text/plain")
 		rw.WriteHeader(resp.status)
 		rw.Write(resp.body)
 	})
+}
+
+// writeXMLDiff decodes the PoB codes sent and returned by an update-config
+// request and writes a unified diff of the underlying export XML to a file
+// under dir, so config-detection changes can be inspected without decoding
+// PoB codes by hand. Gated behind POB_DEBUG_XML_DIFF; failures here are
+// logged, not fatal.
+func writeXMLDiff(f *flavor, dir string, requestBody, responseBody []byte) {
+	before, err := decodePobCode(requestBody)
+	if err != nil {
+		f.logf("xml diff: decoding request pob code: %v", err)
+		return
+	}
+	after, err := decodePobCode(responseBody)
+	if err != nil {
+		f.logf("xml diff: decoding response pob code: %v", err)
+		return
+	}
+	diff := unifiedXMLDiff(before, after, 3)
+	if diff == "" {
+		diff = "no changes"
+	}
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		f.logf("xml diff: creating %s: %v", dir, err)
+		return
+	}
+	path := filepath.Join(dir, fmt.Sprintf("%s-update-config-%d.diff", f.name, time.Now().UnixNano()))
+	if err := os.WriteFile(path, []byte(diff), 0o644); err != nil {
+		f.logf("xml diff: writing %s: %v", path, err)
+		return
+	}
+	f.logf("update-config xml diff written to %s", path)
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) bool {
@@ -591,4 +629,45 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	case <-time.After(d):
 		return true
 	}
+}
+
+// processJob acquires a worker, runs the given endpoint with body, and returns
+// the raw response bytes. It mirrors the HTTP handler path but is used by the
+// Kafka consumer to avoid the overhead of an HTTP round-trip.
+func (p *pool) processJob(ctx context.Context, f *flavor, endpoint string, body []byte) ([]byte, error) {
+	var (
+		w   *workerProc
+		err error
+	)
+	if p.prewarm {
+		w, err = p.acquire(ctx, f)
+	} else {
+		var release func()
+		w, release, err = p.acquireCold(ctx, f)
+		if release != nil {
+			defer release()
+		}
+	}
+	if err != nil {
+		jobsTotal.WithLabelValues(f.name, endpoint, "busy").Inc()
+		return nil, fmt.Errorf("acquiring pob worker: %w", err)
+	}
+	start := time.Now()
+	resp, err := w.execute(endpoint, body, p.cfg.jobTimeout)
+	jobDuration.WithLabelValues(f.name, endpoint).Observe(time.Since(start).Seconds())
+	if err != nil {
+		jobsTotal.WithLabelValues(f.name, endpoint, "error").Inc()
+		if p.prewarm {
+			w.retire()
+		}
+		return nil, fmt.Errorf("pob worker execution: %w", err)
+	}
+	jobsTotal.WithLabelValues(f.name, endpoint, strconv.Itoa(resp.status)).Inc()
+	if p.prewarm {
+		p.releaseWorker(f, w)
+	}
+	if resp.status != http.StatusOK {
+		return nil, fmt.Errorf("pob worker returned status %d: %s", resp.status, resp.body)
+	}
+	return resp.body, nil
 }

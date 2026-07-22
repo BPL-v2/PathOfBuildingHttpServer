@@ -682,6 +682,9 @@ function ConfigAutoDetect:Apply(build)
 			if gem.nameSpec == 'Explosive Arrow' then
 				gem.skillPart = 2
 			end
+			if gem.nameSpec == 'Rage Vortex' or gem.nameSpec == 'Rage Vortex of Berserking' then
+				gem.skillPart = 2
+			end
 			if gem.nameSpec == 'Summon Raging Spirit' then
 				gem.count = 20
 			end

@@ -1,4 +1,5 @@
 package main
+
 import (
 	"log"
 	"os"
@@ -16,6 +17,9 @@ type config struct {
 	queueTimeout     time.Duration // request waiting for a warm worker
 	idleTimeout      time.Duration // no requests -> shut down warm workers (0: never)
 	maxJobsPerWorker int           // requests a warm worker serves before being retired (0: unlimited)
+	kafkaBroker      string        // Kafka broker address; empty disables the Kafka consumer
+	debugXMLDiff     bool          // write a before/after unified diff of the PoB export XML for update-config to debugXMLDiffDir
+	debugXMLDiffDir  string        // directory diff files are written to when debugXMLDiff is set
 }
 
 func envOr(key, fallback string) string {

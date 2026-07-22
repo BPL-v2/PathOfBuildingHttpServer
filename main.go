@@ -26,6 +26,9 @@ func main() {
 		queueTimeout:     envDurationSecOr("POB_QUEUE_TIMEOUT_SEC", 30*time.Second),
 		idleTimeout:      envDurationSecOr("POB_IDLE_TIMEOUT_SEC", 300*time.Second),
 		maxJobsPerWorker: envIntOr("POB_MAX_JOBS_PER_WORKER", 500),
+		kafkaBroker:      envOr("KAFKA_BROKER", ""),
+		debugXMLDiff:     envBoolOr("POB_DEBUG_XML_DIFF", false),
+		debugXMLDiffDir:  envOr("POB_DEBUG_XML_DIFF_DIR", "xml-diffs"),
 	}
 
 	prewarm := envBoolOr("POB_PREWARM", true)
@@ -77,6 +80,12 @@ func main() {
 		if cfg.idleTimeout > 0 {
 			go p.runReaper(workerCtx)
 		}
+	}
+
+	if cfg.kafkaBroker != "" {
+		go runKafkaConsumer(workerCtx, p, cfg.kafkaBroker)
+	} else {
+		log.Print("KAFKA_BROKER not set: Kafka consumer disabled, HTTP-only mode")
 	}
 
 	server := &http.Server{
