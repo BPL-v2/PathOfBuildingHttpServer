@@ -2,3 +2,4 @@ PathOfBuilding/
 PathOfBuilding-PoE2/
 PathOfBuildingHttpServer
 xml-diffs/
+.env

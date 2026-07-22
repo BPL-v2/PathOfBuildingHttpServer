@@ -108,6 +108,12 @@ func (f *flavor) logf(format string, args ...any) {
 	log.Printf("["+f.name+"] "+format, args...)
 }
 
+// workerLogf prefixes a log line with the worker's pid, so concurrent
+// workers' interleaved log output can be told apart.
+func (f *flavor) workerLogf(w *workerProc, format string, args ...any) {
+	f.logf("worker %d: "+format, append([]any{w.cmd.Process.Pid}, args...)...)
+}
+
 // pool maintains size pre-initialized workers shared across all flavors.
 type pool struct {
 	size    int
@@ -224,8 +230,7 @@ func (p *pool) drainIdleWorkers() {
 		for drained := false; !drained; {
 			select {
 			case w := <-f.warm:
-				f.logf("no requests for %s, shutting down idle warm worker pid %d",
-					p.cfg.idleTimeout, w.cmd.Process.Pid)
+				f.workerLogf(w, "no requests for %s, shutting down idle warm worker", p.cfg.idleTimeout)
 				// Closing stdin makes the worker read EOF and exit cleanly;
 				// its slot then parks in waitUntilActive.
 				w.stdin.Close()
@@ -255,17 +260,17 @@ func (f *flavor) readStdout(w *workerProc, r io.Reader) {
 		case strings.HasPrefix(trimmed, "#POB RESPONSE "):
 			var status, length int
 			if _, scanErr := fmt.Sscanf(trimmed, "#POB RESPONSE %d %d", &status, &length); scanErr != nil {
-				f.logf("malformed response header %q: %v", trimmed, scanErr)
+				f.workerLogf(w, "malformed response header %q: %v", trimmed, scanErr)
 				break
 			}
 			body := make([]byte, length)
 			if _, readErr := io.ReadFull(br, body); readErr != nil {
-				f.logf("truncated response body: %v", readErr)
+				f.workerLogf(w, "truncated response body: %v", readErr)
 				break
 			}
 			w.resp <- response{status: status, body: body}
 		case trimmed != "":
-			f.logf("%s", trimmed)
+			f.workerLogf(w, "%s", trimmed)
 		}
 		if err != nil {
 			close(w.exited)
@@ -274,16 +279,16 @@ func (f *flavor) readStdout(w *workerProc, r io.Reader) {
 	}
 }
 
-func (f *flavor) logLines(r io.Reader) {
+func (f *flavor) logLines(w *workerProc, r io.Reader) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 64*1024), 64*1024)
 	for scanner.Scan() {
 		if line := scanner.Text(); line != "" {
-			f.logf("%s", line)
+			f.workerLogf(w, "%s", line)
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		f.logf("stderr read error: %v", err)
+		f.workerLogf(w, "stderr read error: %v", err)
 	}
 }
 
@@ -322,7 +327,7 @@ func (p *pool) spawn(f *flavor) (*workerProc, error) {
 	f.mu.Unlock()
 
 	go f.readStdout(w, stdout)
-	go f.logLines(stderr)
+	go f.logLines(w, stderr)
 	go func() {
 		<-w.exited
 		// The process is a zombie until Wait; sample its final CPU time
@@ -390,7 +395,7 @@ func (p *pool) fillSlot(ctx context.Context, f *flavor, backoff *time.Duration) 
 		startTimer.Stop()
 	case <-w.exited:
 		startTimer.Stop()
-		f.logf("worker exited before becoming ready")
+		f.workerLogf(w, "exited before becoming ready")
 		f.failures.Add(1)
 		if !sleepCtx(ctx, *backoff) {
 			return false
@@ -398,7 +403,7 @@ func (p *pool) fillSlot(ctx context.Context, f *flavor, backoff *time.Duration) 
 		*backoff = min(*backoff*2, 30*time.Second)
 		return true
 	case <-startTimer.C:
-		f.logf("worker did not become ready within %s, killing it", p.cfg.startTimeout)
+		f.workerLogf(w, "did not become ready within %s, killing it", p.cfg.startTimeout)
 		w.kill()
 		f.failures.Add(1)
 		return true
@@ -409,7 +414,7 @@ func (p *pool) fillSlot(ctx context.Context, f *flavor, backoff *time.Duration) 
 	}
 	*backoff = time.Second
 	bootDuration.WithLabelValues(f.name).Observe(time.Since(started).Seconds())
-	f.logf("worker pid %d warm after %s", w.cmd.Process.Pid, time.Since(started).Round(time.Millisecond))
+	f.workerLogf(w, "warm after %s", time.Since(started).Round(time.Millisecond))
 
 	select {
 	case f.warm <- w:
@@ -462,7 +467,7 @@ func (p *pool) acquireCold(ctx context.Context, f *flavor) (*workerProc, func(),
 	select {
 	case <-w.ready:
 		bootDuration.WithLabelValues(f.name).Observe(time.Since(started).Seconds())
-		f.logf("cold worker pid %d ready after %s", w.cmd.Process.Pid, time.Since(started).Round(time.Millisecond))
+		f.workerLogf(w, "cold worker ready after %s", time.Since(started).Round(time.Millisecond))
 		return w, release, nil
 	case <-w.exited:
 		f.failures.Add(1)
@@ -494,7 +499,7 @@ func (p *pool) acquire(ctx context.Context, f *flavor) (*workerProc, error) {
 		case w := <-f.warm:
 			select {
 			case <-w.exited:
-				f.logf("discarding worker that died while idle")
+				f.workerLogf(w, "discarding worker that died while idle")
 				continue
 			default:
 				return w, nil
@@ -517,7 +522,7 @@ func (p *pool) releaseWorker(f *flavor, w *workerProc) {
 	default:
 	}
 	if p.cfg.maxJobsPerWorker > 0 && w.jobsDone >= p.cfg.maxJobsPerWorker {
-		f.logf("worker pid %d retiring after %d jobs", w.cmd.Process.Pid, w.jobsDone)
+		f.workerLogf(w, "retiring after %d jobs", w.jobsDone)
 		w.retire()
 		return
 	}
@@ -567,7 +572,7 @@ func (p *pool) handler(f *flavor) http.Handler {
 		jobDuration.WithLabelValues(f.name, endpoint).Observe(time.Since(jobStart).Seconds())
 		if err != nil {
 			jobsTotal.WithLabelValues(f.name, endpoint, "error").Inc()
-			f.logf("%s failed: %v", endpoint, err)
+			f.workerLogf(w, "%s failed: %v", endpoint, err)
 			if p.prewarm {
 				// Its state after a failed/timed-out job is untrustworthy;
 				// don't hand it to another request.

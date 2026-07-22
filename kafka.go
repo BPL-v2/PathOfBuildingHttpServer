@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/segmentio/kafka-go"
@@ -57,6 +58,12 @@ func runKafkaConsumer(ctx context.Context, p *pool, broker string) {
 
 	log.Printf("kafka consumer started on broker %s, topic %s", broker, pobRequestsTopic)
 
+	// Bounded by the worker pool size: fetching ahead of that just queues
+	// goroutines waiting on p.acquire, it doesn't get jobs done any faster.
+	sem := make(chan struct{}, p.size)
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
 	for {
 		msg, err := reader.FetchMessage(ctx)
 		if err != nil {
@@ -68,10 +75,21 @@ func runKafkaConsumer(ctx context.Context, p *pool, broker string) {
 			continue
 		}
 
-		// Process synchronously to honour the pool's concurrency limits.
-		result := processKafkaRequest(ctx, p, msg.Value)
-		publishKafkaResult(ctx, writer, result)
-		reader.CommitMessages(ctx, msg)
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+		wg.Add(1)
+		go func(msg kafka.Message) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			result := processKafkaRequest(ctx, p, msg.Value)
+			publishKafkaResult(ctx, writer, result)
+			if err := reader.CommitMessages(ctx, msg); err != nil && ctx.Err() == nil {
+				log.Printf("kafka: failed to commit message: %v", err)
+			}
+		}(msg)
 	}
 }
 

@@ -4,11 +4,13 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -16,6 +18,10 @@ import (
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("[pob-server] ")
+
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
+		log.Fatalf("failed to load .env: %v", err)
+	}
 
 	cfg := config{
 		listenAddr:       envOr("POB_LISTEN_ADDR", ":8080"),
@@ -35,6 +41,11 @@ func main() {
 	if !prewarm {
 		log.Print("prewarm disabled: workers are spawned per request, response times include PoB boot")
 	}
+	// By default prewarm only keeps workers warm across requests; the pool
+	// still starts idle and spawns nothing until the first real request (see
+	// newPool). Set this to spawn the full worker set immediately at boot
+	// instead, at the cost of a startup CPU/memory spike.
+	warmOnStartup := envBoolOr("POB_WARM_ON_STARTUP", false)
 
 	games := []struct {
 		name        string
@@ -73,6 +84,9 @@ func main() {
 
 	var slots sync.WaitGroup
 	if p.prewarm {
+		if warmOnStartup {
+			p.touch()
+		}
 		for range p.size {
 			slots.Add(1)
 			go p.runSlot(workerCtx, &slots)
