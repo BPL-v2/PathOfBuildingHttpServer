@@ -29,6 +29,7 @@ type pobKafkaRequest struct {
 // the CharacterPob entity without an extra DB lookup.
 type pobKafkaResult struct {
 	CharacterID string `json:"character_id"`
+	Character   string `json:"character,omitempty"`
 	Export      string `json:"export"`
 	Error       string `json:"error,omitempty"`
 }
@@ -104,6 +105,7 @@ func processKafkaRequest(ctx context.Context, p *pool, data []byte) pobKafkaResu
 
 	return pobKafkaResult{
 		CharacterID: req.CharacterID,
+		Character:   string(req.Character),
 		Export:      string(export),
 	}
 }
