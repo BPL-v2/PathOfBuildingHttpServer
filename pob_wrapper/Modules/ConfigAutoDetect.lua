@@ -644,9 +644,8 @@ function ConfigAutoDetect:Apply(build)
     -- EHP Calculation Mode
     -- =====================
     -- Disable gain on block/suppress/hit
-	if data.mods["Disable Gain on Block"] then
-    	config.DisableEHPGainOnBlock = true
-	end
+    config.DisableEHPGainOnBlock = true
+	
 	-- =====================
 	-- FLASKS
 	-- =====================
