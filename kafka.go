@@ -32,11 +32,11 @@ type pobKafkaRequest struct {
 // request's original enqueue time so the backend can persist against when the
 // character was queued rather than when this result was produced.
 type pobKafkaResult struct {
-	CharacterID string    `json:"character_id"`
-	Character   string    `json:"character,omitempty"`
-	Export      string    `json:"export"`
-	Error       string    `json:"error,omitempty"`
-	QueuedAt    time.Time `json:"queued_at"`
+	CharacterID string          `json:"character_id"`
+	Character   json.RawMessage `json:"character,omitempty"`
+	Export      string          `json:"export"`
+	Error       string          `json:"error,omitempty"`
+	QueuedAt    time.Time       `json:"queued_at"`
 }
 
 // runKafkaConsumer reads character data from the pob-requests topic, processes
@@ -129,7 +129,7 @@ func processKafkaRequest(ctx context.Context, p *pool, data []byte) pobKafkaResu
 
 	return pobKafkaResult{
 		CharacterID: req.CharacterID,
-		Character:   string(req.Character),
+		Character:   req.Character,
 		Export:      string(export),
 		QueuedAt:    req.QueuedAt,
 	}

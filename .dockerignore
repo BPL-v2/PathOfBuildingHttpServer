@@ -1,6 +1,7 @@
 .git
 .github
 .claude
+.env
 scripts
 testdata
 *_test.go
